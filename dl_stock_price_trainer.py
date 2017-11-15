@@ -1,10 +1,13 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 
 from sklearn.preprocessing import MinMaxScaler
 
-DEFAULT_STOCK_FILE = "/home/ubuntu/angular4-prjs/tf-dl-predict-stock-price/data/data_stocks.csv"
+DEFAULT_STOCK_FILE = "data/data_stocks.csv"
+DEFAULT_BATCH_SIZE = 256
 
 
 def load_stock_data():
@@ -17,10 +20,11 @@ def load_stock_data():
 
 
 def build_mlp(n_stocks, n_target, input_data):
-    n_neurons_1 = 1024
-    n_neurons_2 = 512
-    n_neurons_3 = 256
-    n_neurons_4 = 128
+    n_neurons_1 = 2048  # 1024
+    n_neurons_2 = 1024  # 512
+    n_neurons_3 = 512   # 256
+    n_neurons_4 = 256   # 128
+    n_neurons_5 = 128
 
     # Initializers
     sigma = 1
@@ -48,15 +52,20 @@ def build_mlp(n_stocks, n_target, input_data):
     bias_hidden_4 = tf.Variable(bias_initializer([n_neurons_4]))
     hidden_4 = tf.nn.relu(tf.add(tf.matmul(hidden_3, W_hidden_4), bias_hidden_4))
 
+    # Layer 5: Variables for hidden weights and biases
+    W_hidden_5 = tf.Variable(weight_initializer([n_neurons_4, n_neurons_5]))
+    bias_hidden_5 = tf.Variable(bias_initializer([n_neurons_5]))
+    hidden_5 = tf.nn.relu(tf.add(tf.matmul(hidden_4, W_hidden_5), bias_hidden_5))
+
     # Output layer (must be transposed)
-    W_out = tf.Variable(weight_initializer([n_neurons_4, n_target]))
+    W_out = tf.Variable(weight_initializer([n_neurons_5, n_target]))
     bias_out = tf.Variable(bias_initializer([n_target]))
-    out = tf.transpose(tf.add(tf.matmul(hidden_4, W_out), bias_out))
+    out = tf.transpose(tf.add(tf.matmul(hidden_5, W_out), bias_out))
 
     return out
 
 
-def main():
+def train_mlp(epochs):
     # Preparing training and testing data
     data = load_stock_data()
     n = data.shape[0]
@@ -105,9 +114,8 @@ def main():
     # Run initializer
     session.run(tf.global_variables_initializer())
 
-    # Number of epochs and batch size
-    epochs = 10
-    batch_size = 256
+    # set batch size
+    batch_size = DEFAULT_BATCH_SIZE
 
     for e in range(epochs):
         # Shuffle training data
@@ -126,13 +134,17 @@ def main():
             # Run optimizer with batch
             session.run(opt, feed_dict={X_input: batch_x, Y_input: batch_y})
 
-            if np.mod(i, 5) == 0:
-                mse_val = session.run(mse, feed_dict={X_input: X_test, Y_input: Y_test})
+        mse_val = session.run(mse, feed_dict={X_input: X_test, Y_input: Y_test})
+        print("At {}th epoch, mse for X_test/Y_test is {}".format(e, mse_val))
 
-                print("At {} epoch {} batch, mse is {}".format(e, i, mse_val))
 
+parser = argparse.ArgumentParser(description="Training TensorFlow MLP to predict SP500 Index")
+parser.add_argument('-ep', type=int, default=10, help="Number of epochs")
 
 if __name__ == "__main__":
+    parsed_args = parser.parse_args()
+    epochs = parsed_args.ep
+
     tf.logging.set_verbosity(tf.logging.INFO)
     
-    main()
+    train_mlp(epochs)
