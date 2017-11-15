@@ -4,19 +4,19 @@ import tensorflow as tf
 
 from sklearn.preprocessing import MinMaxScaler
 
-DEFAULT_STOCK_FILE = "data/data_stocks.csv"
+DEFAULT_STOCK_FILE = "/home/ubuntu/angular4-prjs/tf-dl-predict-stock-price/data/data_stocks.csv"
 
 
 def load_stock_data():
-    data = pd.read_csv(DEFAULT_STOCK_FILE)
+    data = pd.read_csv(DEFAULT_STOCK_FILE, sep=',')
 
     # Drop date variable
     data = data.drop(['DATE'], 1)
 
-    return data
+    return np.array(data)
 
 
-def build_mlp(n_stocks, n_target, input):
+def build_mlp(n_stocks, n_target, input_data):
     n_neurons_1 = 1024
     n_neurons_2 = 512
     n_neurons_3 = 256
@@ -31,7 +31,7 @@ def build_mlp(n_stocks, n_target, input):
     # Layer 1: Variables for hidden weights and biases
     W_hidden_1 = tf.Variable(weight_initializer([n_stocks, n_neurons_1]))
     bias_hidden_1 = tf.Variable(bias_initializer([n_neurons_1]))
-    hidden_1 = tf.nn.relu(tf.add(tf.matmul(input, W_hidden_1), bias_hidden_1))
+    hidden_1 = tf.nn.relu(tf.add(tf.matmul(input_data, W_hidden_1), bias_hidden_1))
 
     # Layer 2: Variables for hidden weights and biases
     W_hidden_2 = tf.Variable(weight_initializer([n_neurons_1, n_neurons_2]))
@@ -77,17 +77,24 @@ def main():
     rescaler.transform(data_train)
     rescaler.transform(data_test)
 
+    X_train = data_train[:, 1:]
+    Y_train = data_train[:, 0]
+    X_test = data_test[:, 1:]
+    Y_test = data_test[:, 0]
+
     n_stocks = 500
     n_target = 1
 
-    # Placeholder
-    X = tf.placeholder(dtype=tf.float32, shape=[None, n_stocks])
-    Y = tf.placeholder(dtype=tf.float32, shape=[None])
+    tf.reset_default_graph()
 
-    mlp_out = build_mlp(n_stocks, n_target, X)
+    # Placeholder
+    X_input = tf.placeholder(dtype=tf.float32, shape=[None, n_stocks], name="X_input")
+    Y_input = tf.placeholder(dtype=tf.float32, shape=[None], name="Y_input")
+
+    mlp_out = build_mlp(n_stocks, n_target, X_input)
 
     # Cost function
-    mse = tf.reduce_mean(tf.squared_difference(mlp_out, Y))
+    mse = tf.reduce_mean(tf.squared_difference(mlp_out, Y_input))
 
     # Optimizer
     opt = tf.train.AdamOptimizer().minimize(mse)
@@ -104,20 +111,25 @@ def main():
 
     for e in range(epochs):
         # Shuffle training data
-        shuffle_indices = np.random.permutation(np.arange(len(y_train)))
+        shuffle_indices = np.random.permutation(np.arange(len(Y_train)))
         X_train = X_train[shuffle_indices]
-        y_train = y_train[shuffle_indices]
+        Y_train = Y_train[shuffle_indices]
 
-        n_batch = len(y_train) / batch_size
+        n_batch = int(len(Y_train) / batch_size)
 
         # Minibatch training
         for i in range(0, n_batch):
             start = i * batch_size
             batch_x = X_train[start:start + batch_size]
-            batch_y = y_train[start:start + batch_size]
+            batch_y = Y_train[start:start + batch_size]
 
             # Run optimizer with batch
-            session.run(opt, feed_dict={X: batch_x, Y: batch_y})
+            session.run(opt, feed_dict={X_input: batch_x, Y_input: batch_y})
+
+            if np.mod(i, 5) == 0:
+                mse_val = session.run(mse, feed_dict={X_input: X_test, Y_input: Y_test})
+
+                print("At {} epoch {} batch, mse is {}".format(e, i, mse_val))
 
 
 if __name__ == "__main__":
